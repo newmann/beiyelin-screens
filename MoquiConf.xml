@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <moqui-conf xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/moqui-conf-3.xsd">
+    <screen-facade>
+        <!-- qvt is a custom extension for Quasar & Vue JS component templates (extended HTML) -->
+        <screen-text-output type="qvt" mime-type="text/html" always-standalone="true"
+                            macro-template-location="component://beiyelin-screens/template/screen-macro/DefaultScreenMacros.qvt.ftl"/>
+<!--        <screen-text-output type="qjs" mime-type="application/javascript" always-standalone="true"-->
+<!--                            macro-template-location="component://beiyelin-screens/template/screen-macro/DefaultScreenMacros.plain.ftl"/>-->
+<!--        <screen-text-output type="qvue" mime-type="text/html" always-standalone="true"-->
+<!--                            macro-template-location="component://beiyelin-screens/template/screen-macro/DefaultScreenMacros.plain.ftl"/>-->
+
+        <screen location="component://webroot/screen/webroot.xml" default-subscreen="beiyelin">
+            <subscreens-item name="beiyelin" menu-include="false" no-sub-path="true" location="component://beiyelin-screens/screen/login.xml"/>
+        </screen>
+
+    </screen-facade>
 
 </moqui-conf>

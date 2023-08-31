@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-3.xsd"
+        default-menu-include="false" require-authentication="false" history="false">
+
+    <parameter name="initialTab"/>
+    <parameter name="returnTo"/>
+
+    <!-- partial list of scenarios:
+      x basic login
+        - login username + password success
+        - next screen 2nd factor
+      x login with password change required
+        - login username + password but require password change
+        - next screen change password
+          - go to directly with anchor in URL or something
+          - if password was correct and authc code required for user allow instead of pw on change password
+          - login after change password, don't require login again
+      x cold change password
+        - start on change password tab, enter username, password, new password + confirm
+        - if 2nd factor required go to SecondFactor screen - instead go back to Login#change and get code + new password/verify
+      - reset password
+        - given username send email to UserAccount.emailAddress with separate reset password
+        - in email link to change password tab on login screen with username and reset password filled in
+        - if 2nd factor required for user also require
+      - change user after pre-auth
+    -->
+
+    <transition name="login" require-session-token="false">
+        <actions>
+            <if condition="ec.web?.sessionAttributes?.moquiPreAuthcUsername"><then>
+                <!-- already pre-auth'ed, verify code below -->
+                <set field="username" from="ec.web?.sessionAttributes?.moquiPreAuthcUsername"/>
+            </then><else>
+                <!-- no pre-auth, try logging in (pre-auth if 2nd factor required) -->
+                <set field="loggedIn" from="ec.user.loginUser(username, password)"/>
+            </else></if>
+
+            <if condition="ec.web.sessionAttributes.moquiAuthcFactorRequired">
+                <if condition="code"><then>
+                    <service-call name="org.moqui.impl.UserServices.validate#ExternalUserAuthcCode"
+                            in-map="[code:code]" out-map="validateOut"/>
+                    <if condition="validateOut.verified"><then>
+                        <script>ec.user.internalLoginUser(validateOut.username)</script>
+                        <return/>
+                    </then><else>
+                        <message error="true" public="true">Authentication code is not valid</message>
+                    </else></if>
+                </then><else>
+                    <message error="true" public="true">Authentication code required for user ${username}</message>
+                </else></if>
+            </if>
+        </actions>
+        <!-- no longer using SecondFactor screen, now built into Login screen to better support more scenarios:
+        <conditional-response url="../SecondFactor"><condition>
+            <expression>ec.web.sessionAttributes.moquiAuthcFactorRequired</expression></condition></conditional-response>
+        -->
+        <default-response type="screen-last"/>
+        <error-response url="."/>
+    </transition>
+    <transition name="logout">
+        <actions><script>ec.user.logoutUser()</script></actions>
+        <default-response url="/"/>
+        <error-response url="."/>
+    </transition>
+    <transition name="removePreAuth">
+        <actions><script>
+            ec.web.sessionAttributes.remove("moquiPreAuthcUsername")
+            ec.web.sessionAttributes.remove("moquiAuthcFactorRequired")
+            ec.web.sessionAttributes.remove("moquiPasswordChangeRequired")
+            ec.web.sessionAttributes.remove("moquiExpiredCredentials")
+        </script></actions>
+        <default-response url="."/>
+    </transition>
+    <transition name="resetPassword">
+        <parameter name="username" from="ec.web?.sessionAttributes?.moquiPreAuthcUsername ?: username"/>
+        <service-call name="org.moqui.impl.UserServices.reset#Password" in-map="[username:username]"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="changePassword">
+        <parameter name="username" from="ec.web?.sessionAttributes?.moquiPreAuthcUsername ?: username"/>
+        <service-call name="org.moqui.impl.UserServices.update#Password"/>
+        <actions>
+            <!-- password change success, login the user -->
+            <if condition="updateSuccessful">
+                <set field="loginSuccess" from="ec.user.internalLoginUser(username)"/></if>
+        </actions>
+        <conditional-response type="screen-last"><condition><expression>updateSuccessful</expression></condition></conditional-response>
+        <default-response url="." parameter-map="[initialTab:'#change']"/>
+    </transition>
+    <transition name="createInitialAdminAccount">
+        <service-call name="org.moqui.impl.UserServices.create#InitialAdminAccount"/>
+        <default-response url="../Login"/>
+        <error-response url="."/>
+    </transition>
+    <transition name="sendOtp">
+        <service-call name="org.moqui.impl.UserServices.send#ExternalAuthcCode" in-map="[factorId:factorId]"/>
+        <default-response url="."/>
+    </transition>
+
+    <pre-actions><script>
+        // if user already logged in redirect to root
+        if (ec.user.userId) sri.sendRedirectAndStopRender('/')
+
+        // jQuery/UI
+        html_scripts.add('/libs/jquery/jquery.min.js')
+        // Bootstrap
+        html_scripts.add('/libs/twitter-bootstrap/js/bootstrap.min.js')
+        // Moqui webroot layout
+        html_stylesheets.add('/css/webroot-layout.css')
+        //butterfly
+        html_stylesheets.add('/beiyelin/css/butterfly.css')
+    </script></pre-actions>
+    <actions>
+        <!-- handle returnTo parameter, and general handling for when the Login screen is reached directly
+            (as opposed to redirect following attempted request to screen that requires authz) -->
+        <if condition="returnTo"><then>
+            <log message="setting last path to ${returnTo}"/>
+            <script>ec.web.session.setAttribute('moqui.screen.last.path', returnTo)</script>
+        </then><else>
+            <if condition="!ec.web.session.getAttribute('moqui.screen.last.path')">
+                <set field="referrer" from="ec.web.request.getHeader('Referer')"/>
+                <if condition="referrer"><script>ec.web.session.setAttribute('moqui.screen.last.path', referrer)</script></if>
+            </if>
+        </else></if>
+
+        <set field="passwordChangeRequired" from="ec.web.sessionAttributes.moquiPasswordChangeRequired ?: 'false'" type="Boolean"/>
+        <set field="expiredCredentials" from="ec.web.sessionAttributes.moquiExpiredCredentials ?: 'false'" type="Boolean"/>
+        <if condition="passwordChangeRequired || expiredCredentials">
+            <set field="initialTab" value="#change"/></if>
+        <if condition="initialTab &amp;&amp; !initialTab.startsWith('#')"><set field="initialTab" from="'#' + initialTab"/></if>
+
+        <set field="secondFactorRequired" from="false"/>
+        <if condition="ec.web.sessionAttributes.moquiPreAuthcUsername"><then>
+            <set field="username" from="ec.web.sessionAttributes.moquiPreAuthcUsername"/>
+            <service-call name="org.moqui.impl.UserServices.get#ExternalUserAuthcFactorInfo" out-map="context"/>
+        </then><else>
+            <set field="username" from="ec.web.errorParameters?.username ?: ''"/>
+        </else></if>
+
+        <set field="passwordNode" from="ec.ecfi.confXmlRoot.first('user-facade').first('password')"/>
+        <set field="minLength" from="passwordNode.attribute('min-length')" default-value="8" type="Integer"/>
+        <set field="minDigits" from="passwordNode.attribute('min-digits')" default-value="1" type="Integer"/>
+        <set field="minOthers" from="passwordNode.attribute('min-others')" default-value="1" type="Integer"/>
+    </actions>
+    <widgets>
+        <render-mode>
+            <text type="html"><![CDATA[
+                    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xml:space="preserve" xmlns:xml="http://www.w3.org/XML/1998/namespace" class="svg-defs">
+                      <defs>
+
+                      <pattern id='image' width="1" height="1" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <image xlink:href="/beiyelin/images/pattern_141.gif" width="100" height="100" preserveAspectRatio="none"></image>
+                      </pattern>
+
+                        <g id="shape-butterfly-1">
+                          <path class="path" fill="" clip-rule="evenodd" d="M8.65,2.85c0.934-0.2,2.15-0.333,3.65-0.4c1.534-0.1,2.667-0.083,3.4,0.05
+                            c1.533,0.267,3.45,0.767,5.75,1.5c2.466,0.8,4.35,1.617,5.65,2.45c2.066,1.2,3.883,2.383,5.45,3.55c2.567,2.1,4.35,3.8,5.35,5.1
+                            l2.1,2.5c0.933,1.167,1.517,1.983,1.75,2.45c0.333,0.767,1.083,2.117,2.25,4.05c0.233,0.467,0.717,1.683,1.45,3.65
+                            c0.733,2.067,1.2,3.45,1.4,4.15c0.467,1.733,0.917,3.767,1.35,6.1l0.4,3.85l-0.25-3.4c-0.6-5.967-1.267-10.25-2-12.85
+                            c-0.733-2.434-2.167-5.467-4.3-9.1c-0.966-1.667-1.566-3-1.8-4c-0.233-0.933-0.1-1.267,0.4-1c1.3,0.733,2.917,3.867,4.85,9.4
+                            c1.667,4.7,2.85,11.2,3.55,19.5c0.567,6.934,0.667,11.917,0.3,14.95l0.2,0.05c0.231,0,0.348-0.05,0.35-0.15v0.05l0.1,0.05v27.4
+                            c-0.032-0.018-0.065-0.035-0.1-0.05v-0.05c-0.7,0.267-0.983,0.117-0.85-0.45c0.067-0.333,0.017-0.817-0.15-1.45
+                            c-0.2-0.6-0.316-0.983-0.35-1.15l-0.5-1.65c-0.533-2.967-0.833-5.034-0.9-6.2c-0.1-1.533-0.133-2.4-0.1-2.6
+                            c0-0.933,0.167-1.667,0.5-2.2c0.567-0.9,0.684-1.75,0.35-2.55c-0.167-0.367-0.367-0.6-0.6-0.7c-0.333-0.133-0.517,0.283-0.55,1.25
+                            c-0.033,1.533-0.167,2.9-0.4,4.1c-0.1,2.3-0.267,3.684-0.5,4.15c-0.333,0.667-1.25,2.95-2.75,6.85c-1.167,2.8-2.233,4.817-3.2,6.05
+                            c-0.9,1.2-1.583,2.1-2.05,2.7c-0.8,1-1.434,1.667-1.9,2c-2.067,1.333-3.633,2.067-4.7,2.2c-3.033,0.267-4.95,0.317-5.75,0.15
+                            c-0.8-0.167-1.383-0.217-1.75-0.15c-0.533,0.1-1.033,0.45-1.5,1.05c-0.5,0.667-1.217,1.284-2.15,1.85
+                            c-0.934,0.567-1.85,0.934-2.75,1.1c-2.467,0.433-4.45,0.25-5.95-0.55c-0.7-0.4-1.467-1.15-2.3-2.25c-0.6-0.867-1.033-1.567-1.3-2.1
+                            c-0.267-0.667-0.483-1.483-0.65-2.45c-0.3-1.467-0.383-2.717-0.25-3.75c0.267-1.9,0.45-3.05,0.55-3.45
+                            c0.233-1.233,0.566-2.333,1-3.3C9.25,77.45,9.767,76.4,10,76c0.667-1.233,1.55-2.583,2.65-4.05c1.1-1.434,2.184-2.583,3.25-3.45
+                            c0.367-0.3,1.15-0.867,2.35-1.7c0.767-0.566,1.917-1.25,3.45-2.05c1.733-0.933,3.267-1.633,4.6-2.1
+                            c2.133-0.733,4.534-1.467,7.2-2.2c0.467-0.1,1.517-0.3,3.15-0.6c0.967-0.233,0.4-0.4-1.7-0.5c-2.434-0.1-4.534-0.3-6.3-0.6
+                            c-1.566-0.267-3.383-0.7-5.45-1.3c-2.8-0.8-4.467-1.317-5-1.55c-1.567-0.667-3.2-1.75-4.9-3.25c-1.733-1.533-3-3.1-3.8-4.7
+                            c-0.533-1.067-0.967-2.434-1.3-4.1c-0.233-1.067-0.3-2.133-0.2-3.2c0.133-0.833,0.183-1.3,0.15-1.4v-0.6
+                            c-2.467-3.233-3.983-5.433-4.55-6.6c-0.533-1.033-0.883-1.833-1.05-2.4c-0.3-0.867-0.466-1.85-0.5-2.95
+                            c-0.033-2.367,0.034-4.117,0.2-5.25c0.3-1.034,0.483-1.8,0.55-2.3c0.167-0.867,0.034-1.533-0.4-2c-0.6-0.7-1.133-1.517-1.6-2.45
+                            c-0.566-1.133-0.833-2.117-0.8-2.95c0.033-1.333,0.167-2.367,0.4-3.1c0.367-1.267,1.05-2.267,2.05-3
+                            C4.417,4.25,6.483,3.317,8.65,2.85z"/>
+                        <g>
+
+                      </defs>
+                    </svg>
+                    <!-- <div style="text-align:center;clear:both;position:absolute;top:30px;left:260px;z-index:999"> -->
+                      <div style="text-align:center;clear:both;position:absolute; margin:auto; top:0px; left:0px; right:0px; bottom:0px; padding: 150px 0 58px 0;z-index:999;">
+            ]]></text>
+        </render-mode>
+
+
+        <!-- NOTE: this screen is not under the apps screen, but uses similar header/footer/etc -->
+<!--        <container id="content" style="Login"><container style="inner"><container style="container-fluid">-->
+        <container id="content" style="Login">
+            <render-mode><text type="html"><![CDATA[<div style="width: 450px;background: rgba(255, 255, 255, .7);padding: 40px ;border: 0;border-radius: 10px; margin:auto; top:0px; left:0px; right:0px; bottom:0px;" ]]></text></render-mode>
+
+                <container style="container-fluid">
+            <section-iterate name="headerSavedMessages" list="ec.web?.savedMessages" entry="message"><widgets>
+                <render-mode><text type="html"><![CDATA[<div class="alert alert-success fade in" role="alert"><button type="button" class="close" data-dismiss="alert"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>]]></text></render-mode>
+                <label text="${message}" type="h4"/>
+                <render-mode><text type="html"><![CDATA[</div>]]></text></render-mode>
+            </widgets></section-iterate>
+            <section-iterate name="headerSavedErrors" list="ec.web?.savedErrors" entry="errorMessage"><widgets>
+                <render-mode><text type="html"><![CDATA[<div class="alert alert-danger fade in" role="alert"><button type="button" class="close" data-dismiss="alert"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>]]></text></render-mode>
+                <label text="${errorMessage}" type="h4"/>
+                <render-mode><text type="html"><![CDATA[</div>]]></text></render-mode>
+            </widgets></section-iterate>
+            <section-iterate name="headerSavedValidationErrors" list="ec.web?.savedValidationErrors" entry="validationError"><widgets>
+                <!-- TODO: put these by fields instead of in header -->
+                <render-mode><text type="html"><![CDATA[<div class="alert alert-danger fade in" role="alert"><button type="button" class="close" data-dismiss="alert"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>]]></text></render-mode>
+                <label text="${validationError.message} (for field ${validationError.field})" type="h4"/>
+                <render-mode><text type="html"><![CDATA[</div>]]></text></render-mode>
+            </widgets></section-iterate>
+
+            <section name="NeedsSetupSection" condition="ec.entity.find('moqui.security.UserAccount').disableAuthz().count() > 1"><widgets>
+                <!-- primary scenario, main login screen -->
+                <render-mode><text type="html" template="true" location="component://webroot/screen/webroot/Login.ftl"/></render-mode>
+            </widgets><fail-widgets>
+                <!-- if there are no user accounts, other than the _NA_ UserAccount which is in seed data, show form to create admin account -->
+                <render-mode><text type="html"><![CDATA[
+    <div class="text-center">
+        <h3>Welcome to your new system</h3>
+        <form method="post" action="${sri.buildUrl("createInitialAdminAccount").url}" class="form-signin" id="InitialAdminForm">
+            <p class="text-muted text-center">There are no user accounts, get started by creating an initial administrator account</p>
+            <input type="hidden" name="moquiSessionToken" value="${ec.web.sessionToken}">
+            <input type="text" name="username" value="${(ec.getWeb().getErrorParameters().get("username"))!""}" placeholder="Username" required="required" class="form-control top">
+            <input type="password" name="newPassword" placeholder="New Password" required="required" class="form-control middle">
+            <input type="password" name="newPasswordVerify" placeholder="New Password Verify" required="required" class="form-control middle">
+            <input type="text" name="userFullName" value="${(ec.getWeb().getErrorParameters().get("userFullName"))!""}" placeholder="User Full Name" required="required" class="form-control middle">
+            <input type="text" name="emailAddress" value="${(ec.getWeb().getErrorParameters().get("emailAddress"))!""}" placeholder="Email Address" required="required" class="form-control bottom">
+            <button class="btn btn-lg btn-primary btn-block" type="submit">Create Initial Admin Account</button>
+        </form>
+    </div>
+                ]]></text></render-mode>
+            </fail-widgets></section>
+
+            <!-- TODO: very convenient for dev/testing and generally safe but adds some overhead in production, consider removing for large instances -->
+            <section name="TestLoginSection">
+                <condition><expression>ec.entity.find('moqui.security.UserAccount').condition('userId', 'EX_JOHN_DOE')
+                    .condition('currentPassword', '16ac58bbfa332c1c55bd98b53e60720bfa90d394').disableAuthz().count()</expression></condition>
+                <widgets><render-mode><text type="html"><![CDATA[
+                <form method="post" action="${sri.buildUrl("login").url}" id="TestLoginLink">
+                    <input type="hidden" name="username" value="john.doe">
+                    <input type="hidden" name="password" value="moqui">
+                    <button class="btn btn-sm btn-primary" type="submit" id="TestLoginLink_button">Test Login (John Doe)</button>
+                </form>
+                <script>$("#TestLoginLink_button").focus();</script>
+                ]]></text></render-mode></widgets>
+            </section>
+        </container>
+            <render-mode><text type="html"><![CDATA[</div>]]></text></render-mode>
+            </container>
+
+        <render-mode>
+            <text type="html"><![CDATA[
+                </div>
+                <section class="butterfly_background">
+
+                <section class="butterfly_scene3d">
+
+                  <div class="cube skybox">
+                    <var class="scale">
+                    <figure class="face front"></figure>
+                    <figure class="face back"></figure>
+                    <figure class="face right"></figure>
+                    <figure class="face left"></figure>
+                    <figure class="face top"></figure>
+                    <figure class="face bottom"></figure>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100" class="icon shape-codepen">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100" class="icon shape-codepen">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container"
+                       style="margin-top: -150px; margin-left: 140px;
+                              -webkit-animation-duration: 5s;
+                              -moz-animation-duration: 5s;
+                              -ms-animation-duration: 5s;
+                              -o-animation-duration: 5s;
+                              animation-duration: 5s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .75s;
+                                  -moz-animation-duration: .75s;
+                                  -ms-animation-duration: .75s;
+                                  -o-animation-duration: .75s;
+                                  animation-duration: .75s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .75s;
+                                  -moz-animation-duration: .75s;
+                                  -ms-animation-duration: .75s;
+                                  -o-animation-duration: .75s;
+                                  animation-duration: .75s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container scale_half"
+                       style="margin-top: -10px; margin-left: 50px;
+                              -webkit-animation-duration: 5s;
+                              -moz-animation-duration: 5s;
+                              -ms-animation-duration: 5s;
+                              -o-animation-duration: 5s;
+                              animation-duration: 5s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .75s;
+                                  -moz-animation-duration: .75s;
+                                  -ms-animation-duration: .75s;
+                                  -o-animation-duration: .75s;
+                                  animation-duration: .75s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .75s;
+                                  -moz-animation-duration: .75s;
+                                  -ms-animation-duration: .75s;
+                                  -o-animation-duration: .75s;
+                                  animation-duration: .75s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container scale_half"
+                       style="margin-top: 20px;
+                              -webkit-animation-duration: 20s;
+                              -moz-animation-duration: 20s;
+                              -ms-animation-duration: 20s;
+                              -o-animation-duration: 20s;
+                              animation-duration: 20s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: 1s;
+                                  -moz-animation-duration: 1s;
+                                  -ms-animation-duration: 1s;
+                                  -o-animation-duration: 1s;
+                                  animation-duration: 1s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: 1s;
+                                  -moz-animation-duration: 1s;
+                                  -ms-animation-duration: 1s;
+                                  -o-animation-duration: 1s;
+                                  animation-duration: 1s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container scale_half"
+                       style="margin-top: 100px; margin-left: 50px;
+                              -webkit-animation-duration: 20s;
+                              -moz-animation-duration: 20s;
+                              -ms-animation-duration: 20s;
+                              -o-animation-duration: 20s;
+                              animation-duration: 20s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: 1.2s;
+                                  -moz-animation-duration: 1.2s;
+                                  -ms-animation-duration: 1.2s;
+                                  -o-animation-duration: 1.2s;
+                                  animation-duration: 1.2s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: 1.2s;
+                                  -moz-animation-duration: 1.2s;
+                                  -ms-animation-duration: 1.2s;
+                                  -o-animation-duration: 1.2s;
+                                  animation-duration: 1.2s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container scale_third"
+                       style="margin-top: 150px;
+                              -webkit-animation-duration: 20s;
+                              -moz-animation-duration: 20s;
+                              -ms-animation-duration: 20s;
+                              -o-animation-duration: 20s;
+                              animation-duration: 20s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .35s;
+                                  -moz-animation-duration: .35s;
+                                  -ms-animation-duration: .35s;
+                                  -o-animation-duration: .35s;
+                                  animation-duration: .35s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .35s;
+                                  -moz-animation-duration: .35s;
+                                  -ms-animation-duration: .53s;
+                                  -o-animation-duration: .35s;
+                                  animation-duration: .35s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                  <div class="butterfly_container scale_third"
+                       style="margin-top: -250px; margin-left: 300px;
+                              -webkit-animation-duration: 4s;
+                              -moz-animation-duration: 4s;
+                              -ms-animation-duration: 4s;
+                              -o-animation-duration: 4s;
+                              animation-duration: 4s;">
+                    <var class="rotate3d">
+                    <var class="scale">
+                    <var class="translate3d">
+                    <var class="translate3d-1">
+                    <figure class="butterfly">
+                      <svg class="wing left" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .45s;
+                                  -moz-animation-duration: .45s;
+                                  -ms-animation-duration: .45s;
+                                  -o-animation-duration: .45s;
+                                  animation-duration: .45s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                      <svg class="wing right" viewBox="0 0 50 100"
+                           style="-webkit-animation-duration: .45s;
+                                  -moz-animation-duration: .45s;
+                                  -ms-animation-duration: .45s;
+                                  -o-animation-duration: .45s;
+                                  animation-duration: .45s;">
+                        <use class="left" xlink:href="#shape-butterfly-1"></use>
+                      </svg>
+                    </figure>
+                    </var>
+                    </var>
+                    </var>
+                    </var>
+                  </div>
+
+                </section>
+                </section>
+            ]]></text>
+        </render-mode>
+
+    </widgets>
+</screen>
