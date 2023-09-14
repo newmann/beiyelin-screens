@@ -1,0 +1,6 @@
+/* This software is in the public domain under CC0 1.0 Universal plus a Grant of Patent License. */
+
+
+.value-changed { text-decoration: underline; text-decoration-color: #0097cf; text-decoration-style: dotted; text-decoration-thickness: 3px; }
+.is-changed { font-weight: bolder; }
+

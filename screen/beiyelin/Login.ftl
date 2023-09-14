@@ -39,18 +39,24 @@
             <input type="hidden" name="initialTab" value="login">
             <#-- people know what to do <p class="text-muted text-center">${ec.l10n.localize("Enter your username and password to sign in")}</p> -->
             <#-- not needed for this request: <input type="hidden" name="moquiSessionToken" value="${ec.web.sessionToken}"> -->
-            <input id="login_form_username" name="username" type="text" value="${(username!"")?html}"
-                    <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
-                    required="required" class="form-control top"
-                    placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            <div class="form-group">
+                <input id="login_form_username" name="username" type="text" value="${(username!"")?html}"
+                        <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
+                        required="required" class="form-control top input-lg"
+                        placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            </div>
             <#-- secondFactorRequired will only be set if a user is pre-authenticated, and in that case password not required again -->
             <#if secondFactorRequired>
-                <input id="login_form_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
-                       required="required" class="form-control bottom"
-                       placeholder="${ec.l10n.localize("Authentication Code")}" aria-label="${ec.l10n.localize("Authentication Code")}">
+                <div class="form-group">
+                    <input id="login_form_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           required="required" class="form-control bottom input-lg"
+                           placeholder="${ec.l10n.localize("Authentication Code")}" aria-label="${ec.l10n.localize("Authentication Code")}">
+                </div
             <#else>
-                <input type="password" name="password" required="required" class="form-control <#if secondFactorRequired>middle<#else>bottom</#if>"
-                       placeholder="${ec.l10n.localize("Password")}" aria-label="${ec.l10n.localize("Password")}">
+                <div class="form-group">
+                    <input type="password" name="password" required="required" class="form-control  input-lg <#if secondFactorRequired>middle<#else>bottom</#if>"
+                           placeholder="${ec.l10n.localize("Password")}" aria-label="${ec.l10n.localize("Password")}">
+               </div>
             </#if>
             <button class="btn btn-lg btn-primary btn-block" type="submit">${ec.l10n.localize("Sign in")}</button>
             <#if expiredCredentials><p class="text-warning text-center">WARNING: Your password has expired</p></#if>
@@ -62,10 +68,12 @@
             <p class="text-muted text-center">${ec.l10n.localize("Enter your username to email a reset password")}</p>
             <input type="hidden" name="moquiSessionToken" value="${ec.web.sessionToken}">
             <input type="hidden" name="initialTab" value="reset">
-            <input id="reset_form_username" name="username" type="text" value="${(username!"")?html}"
-                    <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
-                    required="required" class="form-control"
-                    placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            <div class="form-group">
+                <input id="reset_form_username" name="username" type="text" value="${(username!"")?html}"
+                        <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
+                        required="required" class="form-control input-lg"
+                        placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            </div>
             <button class="btn btn-lg btn-danger btn-block" type="submit">${ec.l10n.localize("Email Reset Password")}</button>
         </form>
     </div>
@@ -74,25 +82,35 @@
             <p class="text-muted text-center">${ec.l10n.localize("Enter details to change your password")}</p>
             <input type="hidden" name="moquiSessionToken" value="${ec.web.sessionToken}">
             <input type="hidden" name="initialTab" value="change">
-            <input id="change_form_username" name="username" type="text" value="${(username!"")?html}"
-                    <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
-                    required="required" class="form-control top"
-                    placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            <div class="form-group">
+                <input id="change_form_username" name="username" type="text" value="${(username!"")?html}"
+                        <#if username?has_content && secondFactorRequired>disabled="disabled"</#if>
+                        required="required" class="form-control top input-lg"
+                        placeholder="${ec.l10n.localize("Username")}" aria-label="${ec.l10n.localize("Username")}">
+            </div>
             <#-- secondFactorRequired will only be set if a user is pre-authenticated, and in that case password not required again -->
             <#if secondFactorRequired>
                 <input type="hidden" name="oldPassword" value="ignored">
-                <input id="change_form_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
-                        required="required" class="form-control middle"
-                        placeholder="${ec.l10n.localize("Authentication Code")}" aria-label="${ec.l10n.localize("Authentication Code")}">
+                <div class="form-group">
+                    <input id="change_form_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                            required="required" class="form-control middle input-lg"
+                            placeholder="${ec.l10n.localize("Authentication Code")}" aria-label="${ec.l10n.localize("Authentication Code")}">
+                </div>
             <#else>
-                <input type="password" name="oldPassword" required="required" class="form-control middle"
-                        placeholder="${ec.l10n.localize("Old Password")}" aria-label="${ec.l10n.localize("Old Password")}">
+                <div class="form-group">
+                    <input type="password" name="oldPassword" required="required" class="form-control middle input-lg"
+                            placeholder="${ec.l10n.localize("Old Password")}" aria-label="${ec.l10n.localize("Old Password")}">
+                </div>
             </#if>
             <#-- FUTURE: fancy JS to validate PW as it is entered or on blur -->
-            <input type="password" name="newPassword" required="required" class="form-control middle"
-                    placeholder="${ec.l10n.localize("New Password")}" aria-label="${ec.l10n.localize("New Password")}">
-            <input type="password" name="newPasswordVerify" required="required" class="form-control bottom"
-                    placeholder="${ec.l10n.localize("New Password Verify")}" aria-label="${ec.l10n.localize("New Password Verify")}">
+            <div class="form-group">
+                <input type="password" name="newPassword" required="required" class="form-control middle input-lg"
+                        placeholder="${ec.l10n.localize("New Password")}" aria-label="${ec.l10n.localize("New Password")}">
+            </div>
+            <div class="form-group">
+                <input type="password" name="newPasswordVerify" required="required" class="form-control bottom input-lg"
+                        placeholder="${ec.l10n.localize("New Password Verify")}" aria-label="${ec.l10n.localize("New Password Verify")}">
+            </div>
             <button class="btn btn-lg btn-danger btn-block" type="submit">${ec.l10n.localize("Change Password")}</button>
 
             <p class="text-muted text-center">Password must be at least ${minLength} characters

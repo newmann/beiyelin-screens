@@ -121,7 +121,7 @@ along with this software (see the LICENSE.md file). If not, see
         // Moqui webroot layout
         html_stylesheets.add('/css/webroot-layout.css')
         //butterfly
-        html_stylesheets.add('/beiyelin/css/butterfly.css')
+        html_stylesheets.add('/b/css/butterfly.css')
     </script></pre-actions>
     <actions>
         <!-- handle returnTo parameter, and general handling for when the Login screen is reached directly
@@ -162,7 +162,7 @@ along with this software (see the LICENSE.md file). If not, see
                       <defs>
 
                       <pattern id='image' width="1" height="1" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <image xlink:href="/beiyelin/images/pattern_141.gif" width="100" height="100" preserveAspectRatio="none"></image>
+                        <image xlink:href="/b/images/pattern_141.gif" width="100" height="100" preserveAspectRatio="none"></image>
                       </pattern>
 
                         <g id="shape-butterfly-1">
@@ -202,7 +202,7 @@ along with this software (see the LICENSE.md file). If not, see
         <!-- NOTE: this screen is not under the apps screen, but uses similar header/footer/etc -->
 <!--        <container id="content" style="Login"><container style="inner"><container style="container-fluid">-->
         <container id="content" style="Login">
-            <render-mode><text type="html"><![CDATA[<div style="width: 450px;background: rgba(255, 255, 255, .7);padding: 40px ;border: 0;border-radius: 10px; margin:auto; top:0px; left:0px; right:0px; bottom:0px;" ]]></text></render-mode>
+            <render-mode><text type="html"><![CDATA[<div style="width: 550px;background: rgba(255, 255, 255, .7);padding: 40px ;border: 0;border-radius: 10px; margin:auto; top:0px; left:0px; right:0px; bottom:0px;" ]]></text></render-mode>
 
                 <container style="container-fluid">
             <section-iterate name="headerSavedMessages" list="ec.web?.savedMessages" entry="message"><widgets>
@@ -224,7 +224,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <section name="NeedsSetupSection" condition="ec.entity.find('moqui.security.UserAccount').disableAuthz().count() > 1"><widgets>
                 <!-- primary scenario, main login screen -->
-                <render-mode><text type="html" template="true" location="component://webroot/screen/webroot/Login.ftl"/></render-mode>
+                <render-mode><text type="html" template="true" location="component://beiyelin-screens/screen/beiyelin/Login.ftl"/></render-mode>
             </widgets><fail-widgets>
                 <!-- if there are no user accounts, other than the _NA_ UserAccount which is in seed data, show form to create admin account -->
                 <render-mode><text type="html"><![CDATA[
@@ -254,9 +254,22 @@ along with this software (see the LICENSE.md file). If not, see
                     <input type="hidden" name="password" value="moqui">
                     <button class="btn btn-sm btn-primary" type="submit" id="TestLoginLink_button">Test Login (John Doe)</button>
                 </form>
-                <script>$("#TestLoginLink_button").focus();</script>
+<!--                <script>$("#TestLoginLink_button").focus();</script>-->
                 ]]></text></render-mode></widgets>
             </section>
+                    <section name="TestLoginNewmannSection">
+                        <condition><expression>ec.entity.find('moqui.security.UserAccount').condition('userId', 'NewmannHU')
+                            .condition('currentPassword', '16ac58bbfa332c1c55bd98b53e60720bfa90d394').disableAuthz().count()</expression></condition>
+                        <widgets><render-mode><text type="html"><![CDATA[
+                <form method="post" action="${sri.buildUrl("login").url}" id="TestLoginNewmann">
+                    <input type="hidden" name="username" value="newmann.hu">
+                    <input type="hidden" name="password" value="moqui">
+                    <button class="btn btn-sm btn-primary" type="submit" id="TestLoginNewmann_button">Test Login (Newmann)</button>
+                </form>
+                <script>$("#TestLoginNewmann_button").focus();</script>
+                ]]></text></render-mode></widgets>
+                    </section>
+
         </container>
             <render-mode><text type="html"><![CDATA[</div>]]></text></render-mode>
             </container>

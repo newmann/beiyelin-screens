@@ -10,8 +10,9 @@
 <!--        <screen-text-output type="qvue" mime-type="text/html" always-standalone="true"-->
 <!--                            macro-template-location="component://beiyelin-screens/template/screen-macro/DefaultScreenMacros.plain.ftl"/>-->
 
-        <screen location="component://webroot/screen/webroot.xml" default-subscreen="beiyelin">
-            <subscreens-item name="beiyelin" menu-include="false" no-sub-path="true" location="component://beiyelin-screens/screen/login.xml"/>
+        <screen location="component://webroot/screen/webroot.xml" default-subscreen="b">
+            <subscreens-item name="b" menu-include="false" no-sub-path="true" location="component://beiyelin-screens/screen/beiyelin.xml"/>
+            <subscreens-item name="bapps" menu-include="false" location="component://beiyelin-screens/screen/bapps.xml"/>
         </screen>
 
     </screen-facade>
